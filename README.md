@@ -1,2 +1,2 @@
 # hello_world
-just a repository
+OCR v1.0
