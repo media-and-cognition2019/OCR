@@ -1,149 +1,179 @@
-from tensorflow.examples.tutorials.mnist import input_data
 
-mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
+# Copyright (c) 2018 by huyz. All Rights Reserved.
+
 import tensorflow as tf
 
+from tensorflow.examples.tutorials.mnist import input_data
+mnist = input_data.read_data_sets("MNIST_data", one_hot=True)
 
-learning_rate_base=0.8
-learning_rate_decay=0.99
-training_iters = 200000
-batch_size = 64
-display_step = 20
-moving_average_decay = 0.99
-#
-n_input = 784  #
-n_classes = 10  #
-dropout = 0.8  # Dropout
+learning_rate = 0.0001
+num_epoches = 20
+batch_size = 128
 
-#
-x = tf.placeholder(tf.float32, [None, n_input])
-y = tf.placeholder(tf.float32, [None, n_classes])
-keep_prob = tf.placeholder(tf.float32)
+X = tf.placeholder(tf.float32, shape=[None, 784])
+X_img = tf.reshape(X, shape=[-1, 28, 28, 1])
+Y = tf.placeholder(tf.float32, shape=[None, 10])
 
+def VGG16(x):
 
-#
-def conv2d(name, l_input, w, b):
-    return tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(l_input, w, strides=[1, 1, 1, 1], padding='SAME'), b), name=name)
+    ########## first conv ##########
+    ##### conv1_1 #####
+    conv1 = tf.layers.conv2d(inputs=x, filters=64, kernel_size=3, strides=1, padding="SAME")
+    conv1 = tf.nn.relu(conv1)
 
+    ##### conv1_2 #####
+    conv1 = tf.layers.conv2d(inputs=conv1, filters=64, kernel_size=3, strides=1, padding="SAME")
+    conv1 = tf.nn.relu(conv1)
 
-#
-def max_pool(name, l_input, k):
-    return tf.nn.max_pool(l_input, ksize=[1, k, k, 1], strides=[1, k, k, 1], padding='SAME', name=name)
+    ###### max pool ######
+    pool1 = tf.nn.max_pool(conv1, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="SAME")
 
 
-#
-def norm(name, l_input, lsize=4):
-    return tf.nn.lrn(l_input, lsize, bias=1.0, alpha=0.001 / 9.0, beta=0.75, name=name)
+    ########## second conv ##########
+    ##### conv2_1 #####
+    conv2 = tf.layers.conv2d(inputs=pool1, filters=128, kernel_size=3, strides=1, padding="SAME")
+    conv2 = tf.nn.relu(conv2)
+
+    ##### conv2_2 #####
+    conv2 = tf.layers.conv2d(inputs=conv2, filters=128, kernel_size=3, strides=1, padding="SAME")
+    conv2 = tf.nn.relu(conv2)
+
+    ##### max pool #####
+    pool2 = tf.nn.max_pool(conv2, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="SAME")
 
 
-#
-def alex_net(_X, _weights, _biases, _dropout):
-    #
-    _X = tf.reshape(_X, shape=[-1, 28, 28, 1])
+    ########## third conv ##########
+    ##### conv3_1 #####
+    conv3 = tf.layers.conv2d(inputs=pool2, filters=256, kernel_size=3, strides=1, padding="SAME")
+    conv3 = tf.nn.relu(conv3)
 
-    #
-    conv1 = conv2d('conv1', _X, _weights['wc1'], _biases['bc1'])
-    #
-    pool1 = max_pool('pool1', conv1, k=2)
-    #
-    norm1 = norm('norm1', pool1, lsize=4)
-    # Dropout
-    norm1 = tf.nn.dropout(norm1, _dropout)
+    ##### conv3_2 #####
+    conv3 = tf.layers.conv2d(inputs=conv3, filters=256, kernel_size=3, strides=1, padding="SAME")
+    conv3 = tf.nn.relu(conv3)
 
-    #
-    conv2 = conv2d('conv2', norm1, _weights['wc2'], _biases['bc2'])
-    #
-    pool2 = max_pool('pool2', conv2, k=2)
-    #
-    norm2 = norm('norm2', pool2, lsize=4)
-    # Dropout
-    norm2 = tf.nn.dropout(norm2, _dropout)
+    ##### conv3_3 #####
+    conv3 = tf.layers.conv2d(inputs=conv3, filters=256, kernel_size=1, strides=1, padding="SAME")
+    conv3 = tf.nn.relu(conv3)
 
-    #
-    conv3 = conv2d('conv3', norm2, _weights['wc3'], _biases['bc3'])
-    conv4 = conv2d('conv4', conv3, _weights['wc4'], _biases['bc4'])
-    conv5 = conv2d('conv5', conv4, _weights['wc5'], _biases['bc5'])
-    pool5 = max_pool('pool5', conv5, k=2)
-    #
-    norm5 = norm('norm5', pool5, lsize=4)
-    # Dropout
-    norm5 = tf.nn.dropout(norm5, _dropout)
-
-    #
-    dense1 = tf.reshape(norm5, [-1, _weights['wd1'].get_shape().as_list()[0]])
-    dense1 = tf.nn.relu(tf.matmul(dense1, _weights['wd1']) + _biases['bd1'], name='fc1')
-    #
-    dense2 = tf.nn.relu(tf.matmul(dense1, _weights['wd2']) + _biases['bd2'], name='fc2')  # Relu activation
-
-    #
-    out = tf.matmul(dense2, _weights['out']) + _biases['out']
-    return out
+    ##### max pool #####
+    pool3 = tf.nn.max_pool(conv3, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="SAME")
 
 
-#
-weights = {
-    'wc1': tf.Variable(tf.random_normal([11, 11, 1, 64])),
-    'wc2': tf.Variable(tf.random_normal([5, 5, 64, 192])),
-    'wc3': tf.Variable(tf.random_normal([3, 3, 192, 384])),
-    'wc4': tf.Variable(tf.random_normal([3, 3, 384, 256])),
-    'wc5': tf.Variable(tf.random_normal([3, 3, 256, 256])),
-    'wd1': tf.Variable(tf.random_normal([4 * 4 * 256, 1024])),
-    'wd2': tf.Variable(tf.random_normal([1024, 1024])),
-    'out': tf.Variable(tf.random_normal([1024, 10]))
-}
-biases = {
-    'bc1': tf.Variable(tf.random_normal([64])),
-    'bc2': tf.Variable(tf.random_normal([192])),
-    'bc3': tf.Variable(tf.random_normal([384])),
-    'bc4': tf.Variable(tf.random_normal([256])),
-    'bc5': tf.Variable(tf.random_normal([256])),
-    'bd1': tf.Variable(tf.random_normal([1024])),
-    'bd2': tf.Variable(tf.random_normal([1024])),
-    'out': tf.Variable(tf.random_normal([n_classes]))
-}
+    ########## fourth conv ##########
+    ##### conv4_1 #####
+    conv4 = tf.layers.conv2d(inputs=pool3, filters=512, kernel_size=3, strides=1, padding="SAME")
+    conv4 = tf.nn.relu(conv4)
 
-#
-pred = alex_net(x, weights, biases, keep_prob)
+    ##### conv4_2 #####
+    conv4 = tf.layers.conv2d(inputs=conv4, filters=512, kernel_size=3, strides=1, padding="SAME")
+    conv4 = tf.nn.relu(conv4)
+
+    ##### conv4_3 #####
+    conv4 = tf.layers.conv2d(inputs=conv4, filters=512, kernel_size=1, strides=1, padding="SAME")
+    conv4 = tf.nn.relu(conv4)
+
+    ##### max pool #####
+    pool4 = tf.nn.max_pool(conv4, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="SAME")
 
 
-loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=pred, labels=y))
-global_step = tf.Variable(0, trainable=False)
-variable_averages = tf.train.ExponentialMovingAverage(moving_average_decay, global_step)
-variables_averages_op = variable_averages.apply(tf.trainable_variables())
-learning_rate = tf.train.exponential_decay(learning_rate_base, global_step, mnist.train.num_examples/batch_size, learning_rate_decay)
-train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss, global_step=global_step)
+    ########## fifth conv ##########
+    ##### conv5_1 #####
+    conv5 = tf.layers.conv2d(inputs=pool4, filters=512, kernel_size=3, strides=1, padding="SAME")
+    conv5 = tf.nn.relu(conv5)
+
+    ##### conv5_2 #####
+    conv5 = tf.layers.conv2d(inputs=conv5, filters=512, kernel_size=3, strides=1, padding="SAME")
+    conv5 = tf.nn.relu(conv5)
+
+    ##### conv5_3 #####
+    conv5 = tf.layers.conv2d(inputs=conv5, filters=512, kernel_size=1, strides=1, padding="SAME")
+    conv5 = tf.nn.relu(conv5)
+
+    ##### max pool #####
+    pool5 = tf.nn.max_pool(conv5, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="SAME")
 
 
-with tf.control_dependencies([train_step, variables_averages_op]):
-    train_op = tf.no_op(name='train')
-correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
-accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+    flatten = tf.reshape(pool5, shape=[-1, 1*1*512])
 
+    ########## fc1 ##########
+    fc1 = tf.layers.dense(inputs=flatten, units=4096)
+    fc1 = tf.nn.relu(fc1)
+
+
+    ########## fc2 ##########
+    fc2 = tf.layers.dense(inputs=fc1, units=4096)
+    fc2 = tf.nn.relu(fc2)
+
+
+    ########## fc3 ##########
+    fc3 = tf.layers.dense(inputs=fc2, units=10)
+
+
+    ########## softmax ##########
+    logit = tf.nn.softmax(fc3)
+
+    return logit
+
+
+########## define model, loss and optimizer ##########
+pred = VGG16(X_img)
+
+cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=pred, labels=Y))
+cost_summary = tf.summary.scalar("cost", cost)
+
+optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
+
+
+########## accuracy ##########
+is_correction = tf.equal(tf.argmax(pred, 1), tf.argmax(Y, 1))
+accuracy = tf.reduce_mean(tf.cast(is_correction, tf.float32))
+accuracy_summary = tf.summary.scalar("accuracy", accuracy)
+
+
+########## train and evaluation ##########
+
+gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.4)
+config = tf.ConfigProto(gpu_options=gpu_options)
+sess = tf.Session(config=config)
+
+saver = tf.train.Saver()
 
 init = tf.global_variables_initializer()
+sess.run(init)
 
+'''
+merged_summary = tf.summary.merge_all()
+writer = tf.summary.FileWriter("./logs/VGG")
+writer.add_graph(sess.graph)
+'''
+
+merged_summary = tf.summary.merge_all()
+writer = tf.summary.FileWriter("./logs/VGG")
+writer.add_graph(sess.graph)
+
+print("Learning start...")
+
+for epoch in range(num_epoches):
+    avg_acc = 0
+    avg_cost = 0
+    num_batches = int(mnist.train.num_examples / batch_size)
+    batch_x, batch_y = mnist.train.next_batch(batch_size)
+    feed_dict = {X: batch_x, Y: batch_y}
+
+    for i in range(num_batches):
+        summary, _, c, a = sess.run([merged_summary, optimizer, cost, accuracy], feed_dict=feed_dict)
+        writer.add_summary(summary, global_step=i)
+        avg_acc += a / num_batches
+        avg_cost += c / num_batches
+
+    print("Epoch: {}\tLoss:{:.9f}\tAccuarcy: {:.2%}".format(epoch+1, avg_cost, avg_acc))
+print("Learning finished!")
+
+saver.save(sess, "ckpt_examples/VGG/VGG.ckpt")
+print("Model saved!")
 
 with tf.Session() as sess:
-    sess.run(init)
-    step = 1
-    validate_feed = {x: mnist.validation.images, y: mnist.validation.labels, keep_prob: 1.}
-    test_feed = {x: mnist.test.images, y: mnist.test.labels, keep_prob: 1.}
-    for i in range(training_iters):
-        if i % display_step == 0:
-            validate_acc = sess.run(accuracy, feed_dict=validate_feed)
-            print("After %d trainingstep(s), validation accuracy using average model is %g" % (i, validate_acc))
-        xs, ys = mnist.train.next_batch(batch_size)
-        sess.run(train_op, feed_dict={x: xs, y: ys, keep_prob: dropout})
-    test_acc=sess.run(accuracy, feed_dict=test_feed)
-    print("After %d training step(s),test accuracy using average model is %g" % (training_iters, test_acc))
-
-            #acc = sess.run(accuracy, feed_dict={x: batch_xs, y: batch_ys, keep_prob: 1.})
-            #
-            #loss = sess.run(cost, feed_dict={x: batch_xs, y: batch_ys, keep_prob: 1.})
-            #print("Iter " + str(step * batch_size) + ", Minibatch Loss= " + "{:.6f}".format(
-                #loss) + ", Training Accuracy= " + "{:.5f}".format(acc))
-       # step += 1
-  #  print("Optimization Finished!")
-    #
-  #  print("Testing Accuracy:",
-     #     sess.run(accuracy, feed_dict={x: mnist.test.images[:256], y: mnist.test.labels[:256], keep_prob: 1.}))
+    model_file = tf.train.latest_checkpoint("ckpt_examples/VGG")
+    saver.restore(sess, model_file)
+    accuracy = sess.run(accuracy, feed_dict={X:mnist.test.images, Y: mnist.test.labels})
+print("Accuracy on test: {:.3%}".format(accuracy))
